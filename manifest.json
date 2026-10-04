@@ -1,0 +1,18 @@
+{
+  "id": "/tugas-awam/",
+  "name": "SJAM E-Kehadiran Tugas Awam",
+  "short_name": "Tugas Awam",
+  "lang": "ms",
+  "start_url": "/tugas-awam/",
+  "scope": "/tugas-awam/",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#b8e8d0",
+  "icons": [
+    {
+      "src": "icon.png",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
