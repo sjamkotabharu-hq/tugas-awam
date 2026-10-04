@@ -1,10 +1,6 @@
 <!DOCTYPE html>
 <html lang="ms">
 <head>
-    <link rel="manifest" href="./manifest.json">
-<link rel="icon" type="image/png" href="./icon.png">
-<link rel="apple-touch-icon" href="./icon.png">
-<meta name="theme-color" content="#b8e8d0">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SJAM Kawasan Kelantan Utara - Borang Kehadiran Bertugas</title>
@@ -1359,45 +1355,148 @@ async function deleteCurrentForm() {
         }
 
         // Export to PDF using jsPDF & html2canvas
-        function exportToPDF() {
-            showToast('Menjana fail PDF rasmi...', 'success');
-            const element = document.getElementById('form-paper');
-            
-            // Hide non-print elements temporarily if any inside
-            const options = {
-                scale: 2,
-                useCORS: true,
-                logging: false
-            };
+        async function exportToPDF() {
+    showToast('Menjana PDF...', 'success');
 
-            html2canvas(element, options).then(canvas => {
-                const imgData = canvas.toDataURL('image/png');
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const imgWidth = 210; 
-                const pageHeight = 295;
-                const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                let heightLeft = imgHeight;
-                let position = 0;
+    try {
+        await document.fonts.ready;
 
-                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
+        const element = document.getElementById('form-paper');
 
-                while (heightLeft >= 0) {
-                    position = heightLeft - imgHeight;
-                    pdf.addPage();
-                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                    heightLeft -= pageHeight;
-                }
+        // Ambil nilai semasa sebelum menghasilkan salinan.
+        const values = Array.from(
+            element.querySelectorAll('input, textarea')
+        ).map(field => field.value);
 
-                const formId = document.getElementById('form-id-display').innerText;
-                pdf.save(`${formId}_Kehadiran_Crew.pdf`);
-                showToast('PDF berjaya dimuat turun!', 'success');
-            }).catch(err => {
-                console.error(err);
-                showToast('Ralat semasa menjana PDF.', 'error');
-            });
-        }
+        const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            windowWidth: 1200,
+            logging: false,
+
+            onclone: async function(clonedDocument) {
+                const paper =
+                    clonedDocument.getElementById('form-paper');
+
+                // Susun salinan eksport dengan lebar tetap.
+                paper.style.width = '1000px';
+                paper.style.maxWidth = 'none';
+                paper.style.margin = '0';
+                paper.style.padding = '24px';
+                paper.style.boxShadow = 'none';
+                paper.style.borderRadius = '0';
+
+                // Sembunyikan tindakan dalam borang.
+                paper.querySelectorAll('.no-print').forEach(item => {
+                    item.style.display = 'none';
+                });
+
+                // Pastikan semua lajur jadual muat.
+                paper.querySelectorAll('.table-responsive')
+                    .forEach(wrapper => {
+                        wrapper.style.overflow = 'visible';
+                    });
+
+                paper.querySelectorAll('table').forEach(table => {
+                    table.style.width = '100%';
+                    table.style.minWidth = '0';
+                    table.style.tableLayout = 'fixed';
+                });
+
+                // Gantikan medan input dengan teks biasa
+                // dalam salinan PDF sahaja.
+                paper.querySelectorAll('input, textarea')
+                    .forEach((field, index) => {
+                        const value = values[index] || '';
+
+                        // Tarikh dan masa program menggunakan
+                        // butang sebagai paparan.
+                        if (field.hidden) {
+                            const button = field.previousElementSibling;
+
+                            if (button &&
+                                button.tagName === 'BUTTON') {
+                                const text =
+                                    clonedDocument.createElement('div');
+
+                                text.className = button.className;
+                                text.textContent = value || '—';
+                                text.style.lineHeight = '1.5';
+                                button.replaceWith(text);
+                            }
+
+                            field.remove();
+                            return;
+                        }
+
+                        const text =
+                            clonedDocument.createElement('div');
+
+                        text.className = field.className;
+                        text.textContent = value || '—';
+
+                        Object.assign(text.style, {
+                            height: 'auto',
+                            minHeight: '24px',
+                            minWidth: '0',
+                            maxWidth: '100%',
+                            lineHeight: '1.5',
+                            whiteSpace: 'pre-wrap',
+                            overflowWrap: 'anywhere',
+                            overflow: 'visible'
+                        });
+
+                        field.replaceWith(text);
+                    });
+
+                // Tunggu font dalam salinan tersedia.
+                await clonedDocument.fonts.ready;
+            }
+        });
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 8;
+
+        const availableWidth = pageWidth - margin * 2;
+        const availableHeight = pageHeight - margin * 2;
+
+        // Kekalkan nisbah gambar dan muatkan satu halaman.
+        const ratio = Math.min(
+            availableWidth / canvas.width,
+            availableHeight / canvas.height
+        );
+
+        const imageWidth = canvas.width * ratio;
+        const imageHeight = canvas.height * ratio;
+        const x = (pageWidth - imageWidth) / 2;
+
+        pdf.addImage(
+            canvas.toDataURL('image/png'),
+            'PNG',
+            x,
+            margin,
+            imageWidth,
+            imageHeight
+        );
+
+        const formId = document.getElementById(
+            'form-id-display'
+        ).innerText.trim();
+
+        pdf.save(`${formId}_Kehadiran_Crew.pdf`);
+
+        showToast('PDF berjaya dijana!', 'success');
+
+    } catch (error) {
+        console.error('PDF export error:', error);
+        showToast('Ralat semasa menjana PDF.', 'error');
+    }
+}
 
         // Helper Toast Notification
         function showToast(message, type = 'success') {
