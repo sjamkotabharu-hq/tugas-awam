@@ -272,6 +272,10 @@ SISTEM E-KEHADIRAN TUGAS AWAM
     <i class="fa-solid fa-chart-column"></i> Laporan Jam Bulanan
 </button>
 
+<button type="button" onclick="bukaLaporanJamTahunan()" class="bg-teal-700 hover:bg-teal-800 text-white px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow-sm">
+    <i class="fa-solid fa-calendar-days"></i> Laporan Jam Tahunan
+</button>
+
 <button onclick="deleteCurrentForm()" class="bg-red-700 hover:bg-red-800 text-white px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow-sm">
     <i class="fa-solid fa-trash"></i> Padam Rekod
 </button>
@@ -2339,7 +2343,508 @@ function cetakLaporanJamBulanan() {
 
 }
 
+
+// ==========================================
+// LAPORAN JAM BERTUGAS TAHUNAN
+// TAMBAHAN SAHAJA - FUNGSI ASAL DIKEKALKAN
+// ==========================================
+
+function bukaLaporanJamTahunan() {
+
+    if (document.getElementById('sjam-modal-laporan-tahunan')) return;
+
+    const modal = document.createElement('div');
+
+    modal.id = 'sjam-modal-laporan-tahunan';
+    modal.className =
+        'fixed inset-0 bg-black/60 flex items-center justify-center p-3 no-print';
+
+    modal.style.zIndex = '9999';
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+
+            <h2 class="text-lg font-bold mb-3">
+                LAPORAN JAM BERTUGAS TAHUNAN
+            </h2>
+
+            <div class="flex flex-wrap items-end gap-2 mb-3">
+
+                <div>
+                    <label for="sjam-tahun-laporan"
+                        class="block text-xs font-semibold mb-1">
+                        Tahun
+                    </label>
+
+                    <input id="sjam-tahun-laporan"
+                        type="number"
+                        min="2000"
+                        max="2099"
+                        value="${new Date().getFullYear()}"
+                        class="border border-slate-300 rounded-lg p-2 text-sm w-28">
+                </div>
+
+                <button type="button"
+                    id="sjam-jana-tahunan"
+                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm">
+                    Jana Laporan
+                </button>
+
+            </div>
+
+            <p id="sjam-status-tahunan"
+                class="text-xs text-slate-600 mb-3"></p>
+
+            <div id="sjam-hasil-tahunan"
+                class="overflow-x-auto"></div>
+
+            <div class="flex gap-2 mt-4">
+
+                <button type="button"
+                    id="sjam-cetak-tahunan"
+                    disabled
+                    class="bg-slate-700 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-40">
+                    Cetak Laporan
+                </button>
+
+                <button type="button"
+                    id="sjam-tutup-tahunan"
+                    class="bg-slate-200 px-4 py-2 rounded-lg text-sm">
+                    Tutup
+                </button>
+
+            </div>
+
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#sjam-jana-tahunan').onclick =
+        janaLaporanJamTahunan;
+
+    modal.querySelector('#sjam-cetak-tahunan').onclick =
+        cetakLaporanJamTahunan;
+
+    modal.querySelector('#sjam-tutup-tahunan').onclick =
+        () => modal.remove();
+
+    janaLaporanJamTahunan();
+}
+
+
+// ==========================================
+// JANA LAPORAN TAHUNAN DARIPADA FIREBASE
+// ==========================================
+
+async function janaLaporanJamTahunan() {
+
+    const modal = document.getElementById(
+        'sjam-modal-laporan-tahunan'
+    );
+
+    if (!modal) return;
+
+    const tahun = modal.querySelector(
+        '#sjam-tahun-laporan'
+    ).value.trim();
+
+    const status = modal.querySelector(
+        '#sjam-status-tahunan'
+    );
+
+    const hasil = modal.querySelector(
+        '#sjam-hasil-tahunan'
+    );
+
+    const jana = modal.querySelector(
+        '#sjam-jana-tahunan'
+    );
+
+    const cetak = modal.querySelector(
+        '#sjam-cetak-tahunan'
+    );
+
+    if (!/^20\d{2}$/.test(tahun)) {
+
+        status.textContent =
+            'Sila masukkan tahun yang sah (2000-2099).';
+
+        return;
+    }
+
+    jana.disabled = true;
+    cetak.disabled = true;
+
+    hasil.innerHTML = '';
+
+    status.textContent =
+        'Sedang membaca rekod Firebase...';
+
+    try {
+
+        // Ambil semua borang tugasan
+        const semuaBorang = await firebaseGetDocs(
+            firebaseCollection(db, 'kehadiran_crew')
+        );
+
+        // Pilih rekod mengikut tahun program
+        const borangTahun = semuaBorang.docs.filter(
+            rekod =>
+                String(rekod.data().date || '')
+                    .startsWith(tahun + '-')
+        );
+
+        // Ambil semua kru daripada borang terpilih
+        const semuaKru = await Promise.all(
+
+            borangTahun.map(rekod =>
+                firebaseGetDocs(
+                    firebaseCollection(
+                        db,
+                        'kehadiran_crew',
+                        rekod.id,
+                        'crew'
+                    )
+                )
+            )
+
+        );
+
+        const pemilikID = new Map();
+        const senaraiOrang = new Set();
+
+        let rekodDikira = 0;
+        let rekodDiabaikan = 0;
+
+        for (const snapshot of semuaKru) {
+
+            for (const dokumen of snapshot.docs) {
+
+                const data = dokumen.data();
+
+                const nama = String(
+                    data.name || ''
+                ).trim();
+
+                const idSJAM = String(
+                    data.idSjam || ''
+                ).trim();
+
+                const ic = String(
+                    data.ic || ''
+                ).trim();
+
+                // Guna pengiraan minit laporan bulanan
+                const minit = sjamKiraMinitBertugas(
+                    data.startTime,
+                    data.endTime
+                );
+
+                if (
+                    minit === null ||
+                    (!nama && !idSJAM && !ic)
+                ) {
+
+                    rekodDiabaikan++;
+                    continue;
+                }
+
+                // Kenal pasti individu yang sama
+                const kekunci = [];
+
+                if (idSJAM) {
+                    kekunci.push(
+                        'SJAM:' +
+                        idSJAM.toUpperCase()
+                            .replace(/[\s-]/g, '')
+                    );
+                }
+
+                if (ic) {
+                    kekunci.push(
+                        'IC:' + ic.replace(/\D/g, '')
+                    );
+                }
+
+                if (!kekunci.length) {
+
+                    kekunci.push(
+                        'NAMA:' +
+                        nama.toUpperCase()
+                            .replace(/\s+/g, ' ')
+                    );
+
+                }
+
+                const padanan = [
+                    ...new Set(
+                        kekunci.map(k => pemilikID.get(k))
+                            .filter(Boolean)
+                    )
+                ];
+
+                let orang = padanan[0];
+
+                if (!orang) {
+
+                    orang = {
+                        nama,
+                        idSJAM,
+                        ic,
+                        minit: 0
+                    };
+
+                    senaraiOrang.add(orang);
+                }
+
+                // Satukan rekod yang berkongsi ID
+                for (const lain of padanan.slice(1)) {
+
+                    orang.minit += lain.minit;
+
+                    if (!orang.nama) orang.nama = lain.nama;
+                    if (!orang.idSJAM) orang.idSJAM = lain.idSJAM;
+                    if (!orang.ic) orang.ic = lain.ic;
+
+                    senaraiOrang.delete(lain);
+
+                    for (const [k, pemilik] of pemilikID) {
+
+                        if (pemilik === lain) {
+                            pemilikID.set(k, orang);
+                        }
+
+                    }
+
+                }
+
+                if (!orang.nama) orang.nama = nama;
+                if (!orang.idSJAM) orang.idSJAM = idSJAM;
+                if (!orang.ic) orang.ic = ic;
+
+                // Tambahkan masa bertugas
+                orang.minit += minit;
+
+                kekunci.forEach(k =>
+                    pemilikID.set(k, orang)
+                );
+
+                rekodDikira++;
+            }
+
+        }
+
+        // Susun nama mengikut abjad
+        const senarai = [...senaraiOrang].sort(
+            (a, b) =>
+                a.nama.localeCompare(b.nama, 'ms')
+        );
+
+        const jumlahMinit = senarai.reduce(
+            (sum, orang) => sum + orang.minit,
+            0
+        );
+
+        // Bina senarai laporan
+        const baris = senarai.map((orang, i) => `
+            <tr>
+
+                <td>${i + 1}</td>
+
+                <td>
+                    ${sjamEscapeLaporan(orang.nama || '-')}
+                </td>
+
+                <td>
+                    ${sjamEscapeLaporan(orang.idSJAM || orang.ic || '-')}
+                </td>
+
+                <td style="text-align:right">
+                    ${sjamPaparJam(orang.minit)} Jam
+                </td>
+
+            </tr>
+        `).join('');
+
+        hasil.innerHTML = `
+            <div id="sjam-kandungan-laporan-tahunan">
+
+                <h3 style="text-align:center;font-weight:bold">
+                    ST. JOHN AMBULANS MALAYSIA
+                </h3>
+
+                <p style="text-align:center;font-size:12px">
+                    KAWASAN KELANTAN UTARA (KOTA BHARU)
+                </p>
+
+                <h3 style="text-align:center;font-weight:bold;margin:12px 0">
+                    JUMLAH JAM BERTUGAS TUGAS AWAM TAHUNAN
+                    <br>
+                    TAHUN ${tahun}
+                </h3>
+
+                <table
+                    style="width:100%;border-collapse:collapse;font-size:12px"
+                    border="1"
+                    cellpadding="8">
+
+                    <thead>
+                        <tr style="background:#e2e8f0">
+
+                            <th>Bil</th>
+                            <th>Nama</th>
+                            <th>ID SJAM / IC</th>
+                            <th>Jumlah Jam</th>
+
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        ${baris}
+
+                        <tr style="font-weight:bold;background:#f1f5f9">
+
+                            <td colspan="3">
+                                JUMLAH KESELURUHAN
+                            </td>
+
+                            <td style="text-align:right">
+                                ${sjamPaparJam(jumlahMinit)} Jam
+                            </td>
+
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+        `;
+
+        status.textContent =
+            `${borangTahun.length} borang dijumpai; ` +
+            `${rekodDikira} rekod kru dikira; ` +
+            `${rekodDiabaikan} rekod tidak lengkap diabaikan.`;
+
+        if (!senarai.length) {
+
+            status.textContent +=
+                ' Tiada jam bertugas untuk dipaparkan.';
+
+        }
+
+        cetak.disabled = !senarai.length;
+
+    } catch (error) {
+
+        console.error(
+            'Ralat laporan tahunan:',
+            error
+        );
+
+        status.textContent =
+            'Gagal membaca rekod Firebase.';
+
+        showToast(
+            'Gagal menjana laporan tahunan.',
+            'error'
+        );
+
+    } finally {
+
+        jana.disabled = false;
+
+    }
+
+}
+
+
+// ==========================================
+// CETAK LAPORAN TAHUNAN SAHAJA - A4
+// ==========================================
+
+function cetakLaporanJamTahunan() {
+
+    const laporan = document.getElementById(
+        'sjam-kandungan-laporan-tahunan'
+    );
+
+    if (!laporan) return;
+
+    const tingkap = window.open('', '_blank');
+
+    if (!tingkap) {
+
+        showToast(
+            'Benarkan pop-up untuk mencetak laporan.',
+            'error'
+        );
+
+        return;
+    }
+
+    tingkap.addEventListener('load', () => {
+
+        tingkap.focus();
+        tingkap.print();
+
+    }, { once: true });
+
+    tingkap.document.open();
+
+    tingkap.document.write(`
+        <!DOCTYPE html>
+        <html lang="ms">
+
+        <head>
+            <meta charset="UTF-8">
+
+            <title>Laporan Jam Tahunan SJAM</title>
+
+            <style>
+                @page {
+                    size: A4 portrait;
+                    margin: 12mm;
+                }
+
+                body {
+                    font-family: Arial, sans-serif;
+                    color: #111;
+                }
+
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 12px;
+                }
+
+                th, td {
+                    border: 1px solid #555;
+                    padding: 8px;
+                    overflow-wrap: anywhere;
+                }
+
+                tr {
+                    break-inside: avoid;
+                }
+            </style>
+
+        </head>
+
+        <body>
+            ${laporan.outerHTML}
+        </body>
+
+        </html>
+    `);
+
+    tingkap.document.close();
+
+}
+
+
     </script>
 </body>
 </html>
-
