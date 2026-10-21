@@ -173,9 +173,71 @@ textarea {
         white-space: normal;
     }
 
+
 .table-responsive input {
-        min-width: 110px;
+    min-width: 110px;
+}
+}
+
+/* ==============================
+   CETAK BORANG A4 - SAIZ BESAR
+   ============================== */
+
+@media print {
+
+    /* Besarkan cetakan asal 75% kepada 100% */
+    body {
+        zoom: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
     }
+
+    /* Gunakan ruang kertas A4 */
+    #form-paper {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 8px !important;
+    }
+
+    /* Sembunyikan kewangan ketika print sahaja */
+    #print-financial-box {
+        display: none !important;
+    }
+
+    /* Jadikan bahagian catatan selebar borang */
+    #print-notes-layout {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    /* Pastikan jadual kru muat pada A4 */
+    .table-responsive {
+        width: 100% !important;
+        overflow: visible !important;
+    }
+
+    .table-responsive table {
+        width: 100% !important;
+        min-width: 0 !important;
+        table-layout: fixed !important;
+    }
+
+    /* Besarkan tulisan dalam jadual */
+    .table-responsive th,
+    .table-responsive td {
+        padding: 3px !important;
+        font-size: 10px !important;
+    }
+
+    .table-responsive input {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 2px !important;
+        font-size: 10px !important;
+    }
+
 }
 
 </style>
@@ -405,7 +467,7 @@ SISTEM E-KEHADIRAN TUGAS AWAM
         </div>
 
 <!-- Financial & Notes Section -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 items-start">
+        <div id="print-notes-layout" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 items-start">
             <!-- Notes & Officer in Charge -->
             <div class="flex flex-col gap-4">
                 <div class="border border-slate-300 rounded-xl p-4 bg-slate-50/50">
@@ -422,8 +484,7 @@ SISTEM E-KEHADIRAN TUGAS AWAM
             </div>
 
 <!-- Financial Box (Matching original paper format) -->
-            <div class="border-2 border-slate-800 rounded-xl overflow-hidden bg-white shadow-sm">
-                <div class="bg-slate-800 text-white p-2.5 text-center font-bold text-xs uppercase tracking-wider">
+<div id="print-financial-box" class="border-2 border-slate-800 rounded-xl overflow-hidden bg-white shadow-sm">                <div class="bg-slate-800 text-white p-2.5 text-center font-bold text-xs uppercase tracking-wider">
                     Kewangan / Perbelanjaan Tugas
                 </div>
                 <div class="p-4 space-y-3 text-xs">
